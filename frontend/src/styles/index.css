@@ -470,6 +470,25 @@ a {
   font-size: 12px;
 }
 
+.wallet-connect {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.wallet-input {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  font-family: inherit;
+  min-width: 280px;
+}
+
+.btn--sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
 .segmented {
   display: inline-flex;
   background: var(--card);

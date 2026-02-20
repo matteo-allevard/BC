@@ -25,18 +25,15 @@ import {
   getTrades
 } from "../services/indexer";
 import {
-  connectWallet,
-  getBrowserProvider,
-  getCurrentAccount,
-  onWalletEvents
+  getSavedWalletAddress,
+  saveWalletAddress,
+  clearWalletAddress,
+  isValidXrplAddress
 } from "../services/wallet";
 import { useInterval } from "../hooks/useInterval";
-import type { BrowserProvider, JsonRpcSigner } from "ethers";
 
 export type AppContextValue = {
   wallet: WalletState;
-  provider?: BrowserProvider;
-  signer?: JsonRpcSigner;
   assets: Asset[];
   portfolio: PortfolioHolding[];
   compliance?: ComplianceStatus;
@@ -44,7 +41,8 @@ export type AppContextValue = {
   oraclePrices: Record<string, OraclePrice>;
   indexerStatus?: IndexerStatus;
   refreshAll: () => Promise<void>;
-  connect: () => Promise<void>;
+  connect: (address: string) => Promise<void>;
+  disconnect: () => void;
 };
 
 const AppContext = createContext<AppContextValue | undefined>(undefined);
@@ -54,8 +52,6 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     connected: false,
     status: "idle"
   });
-  const [provider, setProvider] = useState<BrowserProvider>();
-  const [signer, setSigner] = useState<JsonRpcSigner>();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [portfolio, setPortfolio] = useState<PortfolioHolding[]>([]);
   const [compliance, setCompliance] = useState<ComplianceStatus>();
@@ -64,37 +60,42 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [indexerStatus, setIndexerStatus] = useState<IndexerStatus>();
 
   const loadPublicData = useCallback(async () => {
-    const [assetsResult, tradesResult, indexer] = await Promise.all([
-      getAssets(),
-      getTrades(),
-      getIndexerStatus()
-    ]);
-    setAssets(assetsResult);
-    setTrades(tradesResult);
-    setIndexerStatus(indexer);
+    try {
+      const [assetsResult, indexer] = await Promise.all([
+        getAssets(),
+        getIndexerStatus()
+      ]);
+      setAssets(assetsResult);
+      setIndexerStatus(indexer);
 
-    const oracleEntries = await Promise.all(
-      assetsResult
-        .filter((asset) => asset.oracleId)
-        .map(async (asset) => {
-          const oracle = await getOraclePrice(asset.id);
-          return [asset.id, oracle] as const;
-        })
-    );
-    setOraclePrices(Object.fromEntries(oracleEntries));
+      const oracleEntries = await Promise.all(
+        assetsResult
+          .filter((asset) => asset.oracleId)
+          .map(async (asset) => {
+            const oracle = await getOraclePrice(asset.id);
+            return [asset.id, oracle] as const;
+          })
+      );
+      setOraclePrices(Object.fromEntries(oracleEntries));
+    } catch (e) {
+      console.error("Failed to load public data:", e);
+    }
   }, []);
 
-  const loadPrivateData = useCallback(
-    async (address: string) => {
-      const [portfolioResult, complianceResult] = await Promise.all([
+  const loadPrivateData = useCallback(async (address: string) => {
+    try {
+      const [portfolioResult, complianceResult, tradesResult] = await Promise.all([
         getPortfolio(address),
-        getCompliance(address)
+        getCompliance(address),
+        getTrades(address)
       ]);
       setPortfolio(portfolioResult);
       setCompliance(complianceResult);
-    },
-    []
-  );
+      setTrades(tradesResult);
+    } catch (e) {
+      console.error("Failed to load private data:", e);
+    }
+  }, []);
 
   const refreshAll = useCallback(async () => {
     await loadPublicData();
@@ -103,105 +104,56 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [loadPrivateData, loadPublicData, wallet.address]);
 
-  const connect = useCallback(async () => {
-    setWallet((prev) => ({ ...prev, status: "connecting" }));
-    try {
-      const { provider: nextProvider, signer: nextSigner, address, chainId } =
-        await connectWallet();
-      setProvider(nextProvider);
-      setSigner(nextSigner);
-      setWallet({
-        connected: true,
-        status: "ready",
-        address,
-        chainId
-      });
-      await loadPublicData();
-      await loadPrivateData(address);
-    } catch (error) {
+  const connect = useCallback(async (address: string) => {
+    if (!isValidXrplAddress(address)) {
       setWallet({
         connected: false,
         status: "error",
-        error: (error as Error).message
+        error: "Invalid XRPL address"
       });
+      return;
     }
+
+    setWallet({
+      connected: true,
+      status: "ready",
+      address
+    });
+    saveWalletAddress(address);
+    await loadPublicData();
+    await loadPrivateData(address);
   }, [loadPrivateData, loadPublicData]);
 
-  useEffect(() => {
-    const bootstrap = async () => {
-      try {
-        const { accounts, chainId } = await getCurrentAccount();
-        if (accounts.length > 0) {
-          const nextProvider = getBrowserProvider();
-          const nextSigner = await nextProvider.getSigner();
-          setProvider(nextProvider);
-          setSigner(nextSigner);
-          setWallet({
-            connected: true,
-            status: "ready",
-            address: accounts[0],
-            chainId
-          });
-        }
-      } catch {
-        // Silent if wallet not installed.
-      } finally {
-        await loadPublicData();
-      }
-    };
-
-    bootstrap();
-  }, [loadPublicData]);
-
-  useEffect(() => {
-    const unsubscribe = onWalletEvents(
-      async (accounts) => {
-        if (accounts.length === 0) {
-          setWallet({ connected: false, status: "idle" });
-          setPortfolio([]);
-          setCompliance(undefined);
-          return;
-        }
-        const nextProvider = getBrowserProvider();
-        const nextSigner = await nextProvider.getSigner();
-        setProvider(nextProvider);
-        setSigner(nextSigner);
-        setWallet((prev) => ({
-          ...prev,
-          connected: true,
-          address: accounts[0],
-          status: "ready"
-        }));
-      },
-      (chainId) => {
-        setWallet((prev) => ({
-          ...prev,
-          chainId
-        }));
-      }
-    );
-
-    return unsubscribe;
+  const disconnect = useCallback(() => {
+    clearWalletAddress();
+    setWallet({ connected: false, status: "idle" });
+    setPortfolio([]);
+    setCompliance(undefined);
   }, []);
 
   useEffect(() => {
-    if (wallet.address) {
-      loadPrivateData(wallet.address);
-    }
-  }, [wallet.address, loadPrivateData]);
+    const bootstrap = async () => {
+      const savedAddress = getSavedWalletAddress();
+      if (savedAddress && isValidXrplAddress(savedAddress)) {
+        setWallet({
+          connected: true,
+          status: "ready",
+          address: savedAddress
+        });
+        await loadPrivateData(savedAddress);
+      }
+      await loadPublicData();
+    };
+    bootstrap();
+  }, [loadPublicData, loadPrivateData]);
 
-  useInterval(
-    () => {
-      refreshAll();
-    },
-    appConfig.indexer.pollIntervalMs
-  );
+  useInterval(() => {
+    refreshAll();
+  }, appConfig.indexer.pollIntervalMs);
 
   const value = useMemo(
     () => ({
       wallet,
-      provider,
-      signer,
       assets,
       portfolio,
       compliance,
@@ -209,12 +161,11 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       oraclePrices,
       indexerStatus,
       refreshAll,
-      connect
+      connect,
+      disconnect
     }),
     [
       wallet,
-      provider,
-      signer,
       assets,
       portfolio,
       compliance,
@@ -222,7 +173,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       oraclePrices,
       indexerStatus,
       refreshAll,
-      connect
+      connect,
+      disconnect
     ]
   );
 

@@ -1,4 +1,3 @@
-import { appConfig } from "../config/appConfig";
 import { useApp } from "../context/AppContext";
 import { StatusPill } from "./StatusPill";
 
@@ -16,24 +15,6 @@ export const NetworkGate = ({
       <div className="gate">
         <StatusPill tone="warn" label="Wallet not connected" />
         <p>Connect a wallet to access on-chain actions.</p>
-      </div>
-    );
-  }
-
-  if (wallet.chainId !== appConfig.chain.chainId) {
-    return (
-      <div className="gate">
-        <StatusPill tone="bad" label="Wrong network" />
-        <p>Switch to {appConfig.chain.name} to continue.</p>
-      </div>
-    );
-  }
-
-  if (!compliance) {
-    return (
-      <div className="gate">
-        <StatusPill tone="info" label="Loading compliance" />
-        <p>Fetching whitelist and KYC status from the indexer.</p>
       </div>
     );
   }
