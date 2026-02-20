@@ -294,7 +294,3 @@ Pour vérifier les transactions on-chain:
 | 4. DEX/AMM | Pool de liquidité et swaps via AMM XRPL | OK |
 
 ---
-
-## Auteurs
-
-Projet réalisé dans le cadre du cours de Blockchain.
