@@ -28,6 +28,9 @@ def demo_complete_flow():
     kyc_manager = KYCManager(kyc_issuer.seed)
     kyc_manager.issue_kyc_credential(player.classic_address)
     kyc_manager.issue_kyc_credential(trader.classic_address)
+    # Les utilisateurs acceptent leur credential → whitelistés
+    kyc_manager.accept_kyc_credential(player.seed, kyc_issuer.classic_address)
+    kyc_manager.accept_kyc_credential(trader.seed, kyc_issuer.classic_address)
 
     # ETAPE 3: Mint NFT skin
     print("\n[3] Mint NFT Skin")

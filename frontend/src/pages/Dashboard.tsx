@@ -11,7 +11,7 @@ import { EmptyState } from "../components/EmptyState";
 export const Dashboard = () => {
   const { assets, portfolio, trades, compliance, oraclePrices, indexerStatus } = useApp();
 
-  const latestOracle = useMemo(() => Object.values(oraclePrices).slice(0, 2), [oraclePrices]);
+  const latestOracle = useMemo(() => Object.values(oraclePrices), [oraclePrices]);
 
   return (
     <div className="page">
@@ -56,10 +56,10 @@ export const Dashboard = () => {
         </div>
       </div>
 
-      <SectionHeader title="Oracle feeds" subtitle="On-chain price references." />
-      <div className="grid grid--three">
+      <SectionHeader title="Oracle feeds" subtitle="Prix temps réel depuis CoinGecko et Steam Market." />
+      <div className="grid grid--two">
         {latestOracle.length === 0 ? (
-          <EmptyState title="No oracle feeds" subtitle="Connect or configure oracle IDs." />
+          <EmptyState title="Chargement des prix..." subtitle="L'indexer récupère les prix en temps réel." />
         ) : (
           latestOracle.map((oracle) => <OracleCard key={oracle.assetId} oracle={oracle} />)
         )}
@@ -72,11 +72,20 @@ export const Dashboard = () => {
         ) : (
           portfolio.map((holding) => {
             const asset = assets.find((item) => item.id === holding.assetId);
+            const isXrp = holding.assetId === "XRP";
+            const xrpOracle = oraclePrices["XRP"];
+            const usdValue = isXrp && xrpOracle
+              ? (parseFloat(holding.balance) * parseFloat(xrpOracle.price.replace("$", ""))).toFixed(2)
+              : null;
             return (
               <div key={holding.assetId} className="card holding-card">
                 <div className="holding-card__title">{asset?.name ?? holding.assetId}</div>
-                <div className="holding-card__value">{holding.balance}</div>
-                <div className="muted">Valuation {holding.valuation ?? "-"}</div>
+                <div className="holding-card__value">{holding.balance} {isXrp ? "XRP" : ""}</div>
+                {usdValue ? (
+                  <div className="muted">≈ <strong>${usdValue}</strong> USD · via {xrpOracle.source}</div>
+                ) : (
+                  <div className="muted">Valuation {holding.valuation ?? "-"}</div>
+                )}
               </div>
             );
           })

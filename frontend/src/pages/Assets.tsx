@@ -45,9 +45,14 @@ export const Assets = () => {
         {filtered.length === 0 ? (
           <EmptyState title="No assets found" subtitle="Try another filter or mint a new asset." />
         ) : (
-          filtered.map((asset) => (
-            <AssetCard key={asset.id} asset={asset} oraclePrice={oraclePrices[asset.id]} />
-          ))
+          filtered.map((asset) => {
+            const oracle =
+              oraclePrices[asset.id] ??
+              (asset.name.toLowerCase().includes("redline") || asset.name.toLowerCase().includes("ak")
+                ? oraclePrices["AK47-REDLINE"]
+                : undefined);
+            return <AssetCard key={asset.id} asset={asset} oraclePrice={oracle} />;
+          })
         )}
       </div>
     </div>

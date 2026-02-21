@@ -96,17 +96,20 @@ export const getTrades = async (address?: string): Promise<Trade[]> => {
 
 export const getOraclePrice = async (assetId: string): Promise<OraclePrice> => {
   try {
-    const data = await fetchJson<{ price: number; currency: string }>(`/oracle/${assetId}`);
+    const data = await fetchJson<{ price: number; currency: string; source?: string; volume?: string }>(
+      `/oracle/${assetId}`
+    );
     return {
       assetId,
-      price: `$${data.price}`,
+      price: `$${Number(data.price).toFixed(2)}`,
       updatedAt: new Date().toISOString(),
-      source: "XRPL Oracle"
+      source: data.source ?? "Oracle",
+      volume: data.volume
     };
   } catch {
     return {
       assetId,
-      price: "$0",
+      price: "$0.00",
       updatedAt: new Date().toISOString(),
       source: "N/A"
     };

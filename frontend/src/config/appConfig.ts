@@ -16,7 +16,5 @@ export const appConfig = {
     kycIssuer: env.VITE_KYC_ISSUER ?? "",
     nftIssuer: env.VITE_NFT_ISSUER ?? ""
   },
-  features: {
-    enableAdmin: true
-  }
+  features: {}
 };

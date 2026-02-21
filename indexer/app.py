@@ -6,6 +6,8 @@ from xrpl.models.requests import AccountNFTs, AccountInfo, AccountObjects, Accou
 import threading
 import time
 import json
+import requests as http_requests
+from urllib.parse import quote
 
 app = Flask(__name__)
 CORS(app)
@@ -187,6 +189,35 @@ def account_info(address):
         "nft_count": len(nfts)
     })
 
+import os
+AMM_ISSUER = os.environ.get("TOKEN_ISSUER", "rKkKWpDhk7p8f5HKSjAYAuaoyanYeJJrEo")
+AMM_CURRENCY = "CSG"
+
+@app.route('/amm/info', methods=['GET'])
+def amm_info():
+    try:
+        amm_request = xrpl.models.requests.AMMInfo(
+            asset=xrpl.models.currencies.XRP(),
+            asset2=xrpl.models.currencies.IssuedCurrency(
+                currency=AMM_CURRENCY,
+                issuer=AMM_ISSUER
+            )
+        )
+        response = client.request(amm_request)
+        amm = response.result.get("amm", {})
+        xrp_drops = int(amm.get("amount", 0))
+        csg = amm.get("amount2", {})
+        fee = amm.get("trading_fee", 0)
+        return jsonify({
+            "xrp_balance": f"{xrp_drops / 1_000_000:.4f}",
+            "csg_balance": csg.get("value", "0"),
+            "trading_fee": f"{fee / 1000:.1%}",
+            "account": amm.get("account", ""),
+            "lp_token": amm.get("lp_token", {}).get("value", "0")
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route('/kyc/check', methods=['GET'])
 def kyc_check():
     address = request.args.get('address')
@@ -196,13 +227,70 @@ def kyc_check():
     status = check_kyc_status(address, issuer)
     return jsonify(status)
 
+oracle_cache = {}
+ORACLE_TTL = 300  # 5 minutes
+
+SKIN_NAMES = {
+    "AK47-REDLINE": "AK-47 | Redline (Field-Tested)",
+    "AK-47-REDLINE": "AK-47 | Redline (Field-Tested)",
+    "REDLINE": "AK-47 | Redline (Field-Tested)",
+}
+
+def fetch_xrp_price():
+    cache = oracle_cache.get("XRP")
+    if cache and time.time() - cache["ts"] < ORACLE_TTL:
+        return cache["data"]
+    try:
+        resp = http_requests.get(
+            "https://api.coingecko.com/api/v3/simple/price?ids=ripple&vs_currencies=usd",
+            timeout=5
+        )
+        price = resp.json()["ripple"]["usd"]
+        data = {"price": price, "currency": "USD", "source": "CoinGecko"}
+        oracle_cache["XRP"] = {"data": data, "ts": time.time()}
+        return data
+    except Exception as e:
+        print(f"Oracle XRP error: {e}")
+        return {"price": 0.52, "currency": "USD", "source": "fallback"}
+
+def fetch_skin_price(market_hash_name):
+    cache_key = market_hash_name
+    cache = oracle_cache.get(cache_key)
+    if cache and time.time() - cache["ts"] < ORACLE_TTL:
+        return cache["data"]
+    try:
+        encoded = quote(market_hash_name)
+        url = f"https://steamcommunity.com/market/priceoverview/?appid=730&currency=1&market_hash_name={encoded}"
+        resp = http_requests.get(url, timeout=5)
+        result = resp.json()
+        if result.get("success"):
+            raw = result.get("median_price") or result.get("lowest_price", "0")
+            price = float(raw.replace("$", "").replace(",", ".").strip())
+            data = {
+                "price": price,
+                "currency": "USD",
+                "source": "Steam Market",
+                "volume": result.get("volume", "n/a"),
+                "asset": market_hash_name
+            }
+            oracle_cache[cache_key] = {"data": data, "ts": time.time()}
+            return data
+    except Exception as e:
+        print(f"Oracle Steam error: {e}")
+    return {"price": 12.5, "currency": "USD", "source": "fallback", "asset": market_hash_name}
+
 @app.route('/oracle/<asset_id>', methods=['GET'])
 def oracle(asset_id):
-    prices = {
-        "XRP": {"price": 0.52, "currency": "USD"},
-        "CSG": {"price": 15.0, "currency": "USD"}
-    }
-    return jsonify(prices.get(asset_id, {"price": 10.0, "currency": "USD"}))
+    asset_upper = asset_id.upper()
+    if asset_upper == "XRP":
+        return jsonify(fetch_xrp_price())
+    if asset_upper in ("CSG", "CSGO"):
+        return jsonify({"price": 1.0, "currency": "USD", "source": "platform"})
+    skin_name = SKIN_NAMES.get(asset_upper)
+    if skin_name:
+        return jsonify(fetch_skin_price(skin_name))
+    # Essai direct avec le nom passé en paramètre (ex: "AK-47 | Redline (Field-Tested)")
+    return jsonify(fetch_skin_price(asset_id))
 
 def sync_loop():
     while True:

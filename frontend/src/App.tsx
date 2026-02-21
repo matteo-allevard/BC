@@ -5,8 +5,6 @@ import { Assets } from "./pages/Assets";
 import { AssetDetail } from "./pages/AssetDetail";
 import { Tokenize } from "./pages/Tokenize";
 import { Trade } from "./pages/Trade";
-import { Admin } from "./pages/Admin";
-import { appConfig } from "./config/appConfig";
 
 export const App = () => (
   <BrowserRouter>
@@ -17,7 +15,6 @@ export const App = () => (
         <Route path="/assets/:assetId" element={<AssetDetail />} />
         <Route path="/tokenize" element={<Tokenize />} />
         <Route path="/trade" element={<Trade />} />
-        {appConfig.features.enableAdmin && <Route path="/admin" element={<Admin />} />}
       </Routes>
     </Layout>
   </BrowserRouter>

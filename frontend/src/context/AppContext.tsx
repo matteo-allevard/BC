@@ -68,13 +68,13 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
       setAssets(assetsResult);
       setIndexerStatus(indexer);
 
+      // Toujours charger XRP + le skin AK47 depuis l'oracle
+      const ORACLE_IDS = ["XRP", "AK47-REDLINE"];
       const oracleEntries = await Promise.all(
-        assetsResult
-          .filter((asset) => asset.oracleId)
-          .map(async (asset) => {
-            const oracle = await getOraclePrice(asset.id);
-            return [asset.id, oracle] as const;
-          })
+        ORACLE_IDS.map(async (id) => {
+          const oracle = await getOraclePrice(id);
+          return [id, oracle] as const;
+        })
       );
       setOraclePrices(Object.fromEntries(oracleEntries));
     } catch (e) {
