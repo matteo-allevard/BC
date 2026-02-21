@@ -57,6 +57,36 @@ class KYCManager:
             print(f"❌ Erreur lors de l'émission: {e}")
             return None
     
+    def accept_kyc_credential(self, subject_seed, issuer_address):
+        """
+        L'utilisateur accepte son credential KYC → devient whitelisté
+        :param subject_seed: Seed du compte qui accepte le credential
+        :param issuer_address: Adresse de l'issuer qui a émis le credential
+        """
+        from account import get_account_from_seed
+        subject_wallet = get_account_from_seed(subject_seed)
+        credential_type_hex = str_to_hex(KYC_CREDENTIAL_TYPE)
+
+        accept_tx = xrpl.models.transactions.CredentialAccept(
+            account=subject_wallet.classic_address,
+            issuer=issuer_address,
+            credential_type=credential_type_hex
+        )
+
+        print(f"✅ Acceptation du credential KYC par {subject_wallet.classic_address}")
+
+        try:
+            response = xrpl.transaction.submit_and_wait(
+                accept_tx,
+                self.client,
+                subject_wallet
+            )
+            print(f"✅ Credential accepté! Utilisateur whitelisté.")
+            return response.result
+        except Exception as e:
+            print(f"❌ Erreur lors de l'acceptation: {e}")
+            return None
+
     def revoke_kyc_credential(self, subject_address):
         """
         Révoque un credential KYC (blacklist)

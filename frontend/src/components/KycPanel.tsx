@@ -7,7 +7,7 @@ export const KycPanel = ({ compliance }: { compliance?: ComplianceStatus }) => (
     <div className="kyc-panel__row">
       <div>
         <h3>KYC & Compliance</h3>
-        <p>On-chain whitelist and blacklist status are enforced by the smart contract.</p>
+        <p>On-chain whitelist status is enforced by XRPL Credentials.</p>
       </div>
       <StatusPill
         tone={
@@ -36,8 +36,8 @@ export const KycPanel = ({ compliance }: { compliance?: ComplianceStatus }) => (
         <strong>{compliance?.lastUpdated ? new Date(compliance.lastUpdated).toLocaleString() : "-"}</strong>
       </div>
     </div>
-    <a className="btn btn--ghost" href={appConfig.compliance.kycUrl} target="_blank" rel="noreferrer">
-      Open KYC portal
+    <a className="btn btn--ghost" href={appConfig.chain.explorerUrl} target="_blank" rel="noreferrer">
+      View on XRPL Explorer
     </a>
   </div>
 );

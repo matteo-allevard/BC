@@ -44,6 +44,7 @@ export type OraclePrice = {
   price: string;
   updatedAt: string;
   source: string;
+  volume?: string;
 };
 
 export type IndexerStatus = {

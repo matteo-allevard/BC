@@ -1,123 +1,117 @@
 #!/usr/bin/env python
-"""
-Démonstration du système de tokenisation de skins CSGO sur XRPL
-"""
-
 import json
 from account import create_testnet_account, get_account_from_seed
 from nft_skins import CSGOSkinNFT
 from credential_kyc import KYCManager
-from verify_kyc import verify_user_kyc, is_whitelisted
+from verify_kyc import verify_user_kyc, is_whitelisted, check_kyc_status
 from amm_liquidity import LiquidityPool
+from token_fungible import FungibleToken
+
+CURRENCY_CODE = "CSG"  # 3 caractères pour XRPL
 
 def demo_complete_flow():
-    """
-    Démonstration complète du workflow:
-    1. Création des comptes
-    2. Émission KYC
-    3. Mint de skins CSGO
-    4. Vérification
-    5. Création de pool de liquidité
-    """
-    
     print("="*60)
-    print("🎮 DÉMONSTRATION - Tokenisation Skins CSGO sur XRPL")
+    print("DEMO - Tokenisation CSGO sur XRPL")
     print("="*60)
-    
-    # ÉTAPE 1: Création des comptes de test
-    print("\n📝 ÉTAPE 1: Création des comptes")
+
+    # ETAPE 1: Création des comptes
+    print("\n[1] Création des comptes")
     print("-"*40)
-    
-    # Compte pour l'émetteur KYC
     kyc_issuer = create_testnet_account()
-    
-    # Compte pour l'émetteur des skins
-    skin_issuer = create_testnet_account()
-    
-    # Compte pour un utilisateur (joueur)
+    token_issuer = create_testnet_account()
     player = create_testnet_account()
-    
-    # ÉTAPE 2: Initialisation des gestionnaires
-    print("\n🔧 ÉTAPE 2: Initialisation des composants")
+    trader = create_testnet_account()
+
+    # ETAPE 2: Setup KYC
+    print("\n[2] Setup KYC")
     print("-"*40)
-    
     kyc_manager = KYCManager(kyc_issuer.seed)
-    skin_manager = CSGOSkinNFT(skin_issuer.seed)
-    
-    # ÉTAPE 3: Émission du KYC pour le joueur
-    print("\n🔐 ÉTAPE 3: Émission du credential KYC")
+    kyc_manager.issue_kyc_credential(player.classic_address)
+    kyc_manager.issue_kyc_credential(trader.classic_address)
+    # Les utilisateurs acceptent leur credential → whitelistés
+    kyc_manager.accept_kyc_credential(player.seed, kyc_issuer.classic_address)
+    kyc_manager.accept_kyc_credential(trader.seed, kyc_issuer.classic_address)
+
+    # ETAPE 3: Mint NFT skin
+    print("\n[3] Mint NFT Skin")
     print("-"*40)
-    
-    kyc_result = kyc_manager.issue_kyc_credential(player.classic_address)
-    if kyc_result:
-        print("✅ Credential KYC émis avec succès!")
-    
-    # Note: Dans un cas réel, le joueur devrait accepter le credential
-    # via une transaction CredentialAccept
-    
-    # ÉTAPE 4: Mint d'un skin CSGO
-    print("\n🎨 ÉTAPE 4: Mint d'un skin CSGO")
-    print("-"*40)
-    
-    # Données du skin
+    skin_manager = CSGOSkinNFT(token_issuer.seed)
     skin_data = {
         "weapon": "AK-47",
         "skin": "Redline",
         "condition": "Field-Tested",
         "float": 0.287,
-        "pattern": 321,
-        "stattrak": False,
-        "souvenir": False
+        "pattern": 321
     }
-    
     result, token_id = skin_manager.mint_skin(
-        skin_name="AK-47 | Redline (Field-Tested)",
+        skin_name="AK-47 | Redline (FT)",
         skin_data=skin_data,
-        flags=8,  # Transferable
-        transfer_fee=500  # 5% royalties
+        flags=8,
+        transfer_fee=500
     )
-    
-    if token_id:
-        print(f"\n✅ Skin minté avec Token ID: {token_id}")
 
-    # Après l'émission du credential
-    print("\n🔍 Vérification immédiate du KYC...")
-    from verify_kyc import check_kyc_status
+    # ETAPE 4: Création token fungible + pool AMM
+    print("\n[4] Création token fungible CSG")
+    print("-"*40)
+    token_manager = FungibleToken(token_issuer.seed)
+    token_manager.setup_issuer()
+
+    # Créer trustline pour le trader (celui qui va fournir la liquidité)
+    print("\n[5] Setup trustlines")
+    print("-"*40)
+    token_manager.create_trustline(trader.seed, CURRENCY_CODE)
+    token_manager.send_tokens(trader.classic_address, CURRENCY_CODE, "1000")
+
+    # ETAPE 5: Création du pool AMM
+    print("\n[6] Création pool AMM CSG/XRP")
+    print("-"*40)
+    pool_manager = LiquidityPool(trader.seed)
+    pool_manager.create_pool(
+        token_currency=CURRENCY_CODE,
+        token_issuer=token_issuer.classic_address,
+        token_amount="500",
+        xrp_amount="25000000",  # 25 XRP
+        trading_fee=500  # 0.5%
+    )
+
+    # ETAPE 6: Faire un swap
+    print("\n[7] Test swap XRP -> CSG")
+    print("-"*40)
+    pool_manager.swap_xrp_for_token(
+        token_currency=CURRENCY_CODE,
+        token_issuer=token_issuer.classic_address,
+        xrp_amount_drops="5000000"  # 5 XRP
+    )
+
+    # ETAPE 7: Vérifier le pool
+    print("\n[8] Info du pool AMM")
+    print("-"*40)
+    amm_info = pool_manager.get_amm_info(CURRENCY_CODE, token_issuer.classic_address)
+    if amm_info:
+        print(f"Pool trouvé: {json.dumps(amm_info.get('amm', {}), indent=2)[:500]}")
+
+    # ETAPE 8: Vérification KYC
+    print("\n[9] Vérification KYC")
+    print("-"*40)
     status = check_kyc_status(player.classic_address, kyc_issuer.classic_address)
-    print(f"Statut KYC détaillé: {status}")
-    
-    # ÉTAPE 5: Vérification du KYC
-    print("\n✅ ÉTAPE 5: Vérification KYC")
-    print("-"*40)
-    
-    if is_whitelisted(player.classic_address, kyc_issuer.classic_address):
-        print("✅ Le joueur est whitelisté!")
-    else:
-        print("⚠️ Le joueur n'est pas encore whitelisté (acceptation du credential requise)")
-    
-    # ÉTAPE 6: Récupération des skins possédés
-    print("\n📦 ÉTAPE 6: Liste des skins de l'émetteur")
-    print("-"*40)
-    
-    skins = skin_manager.get_owned_skins()
-    for skin in skins:
-        print(f"  • Token ID: {skin['NFTokenID']}")
-        if 'URI_decoded' in skin:
-            print(f"    Metadata: {skin['URI_decoded'][:100]}...")
-    
+    print(f"Statut KYC joueur: {status}")
+
+    # Résumé
     print("\n" + "="*60)
-    print("🎉 Démonstration terminée!")
+    print("DEMO TERMINEE")
     print("="*60)
-    
-    # Résumé des comptes
-    print("\n📋 RÉSUMÉ DES COMPTES")
+    print("\nRESUME DES COMPTES:")
     print("-"*40)
-    print(f"🔐 Émetteur KYC:  {kyc_issuer.classic_address}")
-    print(f"   Seed: {kyc_issuer.seed}")
-    print(f"🎮 Émetteur Skins: {skin_issuer.classic_address}")
-    print(f"   Seed: {skin_issuer.seed}")
-    print(f"👤 Joueur:         {player.classic_address}")
-    print(f"   Seed: {player.seed}")
+    print(f"KYC Issuer:    {kyc_issuer.classic_address}")
+    print(f"  Seed: {kyc_issuer.seed}")
+    print(f"Token Issuer:  {token_issuer.classic_address}")
+    print(f"  Seed: {token_issuer.seed}")
+    print(f"Player:        {player.classic_address}")
+    print(f"  Seed: {player.seed}")
+    print(f"Trader (LP):   {trader.classic_address}")
+    print(f"  Seed: {trader.seed}")
+    print(f"\nToken: {CURRENCY_CODE}")
+    print(f"Pool: {CURRENCY_CODE}/XRP")
 
 if __name__ == "__main__":
     demo_complete_flow()

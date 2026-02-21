@@ -2,7 +2,6 @@ import { NavLink } from "react-router-dom";
 import { WalletButton } from "./WalletButton";
 import { useApp } from "../context/AppContext";
 import { StatusPill } from "./StatusPill";
-import { appConfig } from "../config/appConfig";
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { compliance } = useApp();
@@ -31,11 +30,6 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           <NavLink to="/trade" className="nav__link">
             Trade
           </NavLink>
-          {appConfig.features.enableAdmin && (
-            <NavLink to="/admin" className="nav__link">
-              Admin
-            </NavLink>
-          )}
         </nav>
 
         <div className="sidebar__footer">
